@@ -1,0 +1,10 @@
+{
+	"name": "update",
+	"version": 2.0,
+	"startup": "update.js",
+	"priority": "first",
+	"command": "update",
+	"help": [
+		["{{commandPrefix}}update", "Updates the bot to the latest version.", "Updates the bot to the latest version extended"]
+	]
+}
