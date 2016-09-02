@@ -1,5 +1,5 @@
-var git = require.once('./../../core/git.js'),
-    install = require('./../../core/install.js'),
+var git = require.once(global.rootPathJoin('core/git.js')),
+    install = require(global.rootPathJoin('core/install.js')),
     /**
     Default update period in milliseconds.
     Once per day.
@@ -72,7 +72,7 @@ exports.load = function() {
     var isEnabled = null,
         branchName;
 
-    isEnabled = this.config.getConfig('update').autoUpdateEnabled;
+    isEnabled = exports.config.autoUpdateEnabled;
     shutdown = this.shutdown;
 
     git.getCurrentBranchName(function (err, consoleOutput) {
@@ -86,7 +86,7 @@ exports.load = function() {
     // Only allow auto update to be run on the master branch.
     // By default auto update is enabled but can be turned off in the config.
     if (branchName === 'master' && isEnabled) {
-        var configUpdatePeriod = this.config.getConfig('update').autoUpdatePeriod;
+        var configUpdatePeriod = this.config.autoUpdatePeriod;
         if (configUpdatePeriod) {
             updatePeriod = configUpdatePeriod;
         }
