@@ -1,5 +1,5 @@
-var git = require.once('concierge/git'),
-    install = require(global.rootPathJoin('core/unsafe/install.js')),
+var git = require('concierge/git'),
+    install = global.requireHook,
     /**
     Default update period in milliseconds.
     Once per day.
