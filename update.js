@@ -1,5 +1,5 @@
 var git = require('concierge/git'),
-    install = global.requireHook,
+    npm = require('concierge/npm'),
     /**
     Default update period in milliseconds.
     Once per day.
@@ -49,7 +49,7 @@ var git = require('concierge/git'),
                         }
                         else {
                             try {
-                                install.update();
+                                npm.update();
                             }
                             catch (e) {
                                 console.critical(e);
@@ -125,7 +125,7 @@ exports.run = function (api, event) {
                 else {
                     api.sendMessage($$`Updating installed NPM packages`, event.thread_id);
                     try {
-                        install.update();
+                        npm.update();
                         api.sendMessage($$`Update successful`, event.thread_id);
                     }
                     catch (e) {
