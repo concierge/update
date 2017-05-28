@@ -10,5 +10,7 @@
   "Update failed": "Update failed. Manual intervention is probably required.",
   "Updating submodules": "Updating submodules...",
   "Updating installed NPM packages": "Updating installed NPM packages...",
-  "Update successful": "Update successful. Restart to load changes."
+  "Update successful": "Update successful. Restart to load changes.",
+  "${0} cannot be updated": "Your ${0} installation cannot be updated. Please reinstall from GIT or NPM to enable this feature.",
+  "No update avalible": "No updates were found."
 }
