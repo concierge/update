@@ -1,10 +1,10 @@
 {
-	"name": "update",
-	"version": 2.0,
+	"name": "update-git",
+	"version": 3.0,
 	"startup": "update.js",
 	"priority": "first",
 	"command": "update",
 	"help": [
-		["{{commandPrefix}}update", "Updates the bot to the latest version.", "Updates the bot to the latest version extended"]
+		["{{commandPrefix}}update", "Updates the bot to the latest version using git.", "Updates the bot to the latest version extended"]
 	]
 }
