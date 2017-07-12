@@ -1,141 +1,102 @@
-var git = require('concierge/git'),
+const git = require('concierge/git'),
     npm = require('concierge/npm'),
-    /**
-    Default update period in milliseconds.
-    Once per day.
-    */
-    defaultUpdatePeriod = 86400000,
-    timeout = null,
-    updatePeriod = defaultUpdatePeriod,
-    failedUpdateAttempts = 0,
-    currentSHA = null,
-    shutdown = null,
+    files = require('concierge/files'),
+    defaultUpdatePeriod = 86400000;
 
-    checkForHash = function() {
-        git.getSHAOfRemoteMaster(function(err, consoleOutput) {
-            if (err) {
-                console.debug($$`Failed SHA hash ${consoleOutput}`);
-                return false;
-            }
-            if (currentSHA !== consoleOutput) {
-                currentSHA = consoleOutput;
+class UpdateModule {
+    constructor () {
+        this._failedUpdateAttempts = 0;
+    }
+
+    async _checkForHash () {
+        try {
+            const res = await git.getSHAOfRemoteMaster();
+            if (this._currentSha !== res) {
+                this._currentSha = res;
                 return true;
             }
-
             return false;
-        });
-    },
+        }
+        catch (e) {
+            LOG.debug($$`Failed SHA hash ${e}`);
+            return false;
+        }
+    }
 
-    setUpdateTimer = function() {
-        timeout = setTimeout(function() {
-            git.pull(function(err, consoleOutput) {
+    _setUpdateTimer () {
+        const api = {
+            sendMessage: LOG.debug
+        };
+        this._timeout = setInterval(async() => {
+            let cont = true;
+            if (!await this._runCheckError(api, void(0), git.pull, $$`Updating from git`)) {
+                LOG.error($$`Periodic auto update failed ${''}`);
+                cont = false;
+            }
+
+            if (cont && !await this._runCheckError(api, void(0), git.submoduleUpdate, $$`Updating submodules`)) {
+                LOG.error($$`Periodic auto git submodule update failed. ${''}`);
+                cont = false;
+            }
+
+            if (cont && !await this._runCheckError(api, void(0), npm.update, $$`Updating installed NPM packages`)) {
+                LOG.error($$`Periodic auto update of NPM packages failed.`);
+                cont = false;
+            }
+
+            if (!cont) {
                 // Well something is wrong if the update process has failed for 3 periods.
                 // prevent restart and stop auto updating.
-                if (failedUpdateAttempts > 2) {
+                if (this._failedUpdateAttempts > 2) {
+                    clearTimeout(this._timeout);
+                    delete this._timeout;
                     return;
                 }
-
-                if (err) {
-                    failedUpdateAttempts++;
-                    console.critical(err);
-                    console.debug($$`Periodic auto update failed ${consoleOutput}`);
-                    setUpdateTimer();
-                }
-                else {
-                    git.submoduleUpdate(function(err) {
-                        if (err) {
-                            console.critical(err);
-                            console.debug($$`Periodic auto git submodule update failed. ${consoleOutput}`);
-                        }
-                        else {
-                            try {
-                                npm.update();
-                            }
-                            catch (e) {
-                                console.critical(e);
-                                api.sendMessage($$`Periodic auto update of NPM packages failed.`, event.thread_id);
-                            }
-                        }
-
-                        if (checkForHash()) {
-                            shutdown(StatusFlag.ShutdownShouldRestart);
-                        }
-
-                        setUpdateTimer();
-                    });
-                }
-            });
-        }, updatePeriod);
-    };
-
-exports.load = function() {
-    var isEnabled = null,
-        branchName;
-
-    isEnabled = exports.config.autoUpdateEnabled;
-    shutdown = this.shutdown;
-
-    git.getCurrentBranchName(function (err, consoleOutput) {
-        if (err) {
-            console.debug($$`Failed to get branch name ${consoleOutput}`);
-            return;
-        }
-        branchName = consoleOutput.trim();
-    });
-
-    // Only allow auto update to be run on the master branch.
-    // By default auto update is enabled but can be turned off in the config.
-    if (branchName === 'master' && isEnabled) {
-        var configUpdatePeriod = this.config.autoUpdatePeriod;
-        if (configUpdatePeriod) {
-            updatePeriod = configUpdatePeriod;
-        }
-        git.getSHAOfHead(function (err, consoleOutput) {
-            if (err) {
-                console.debug($$`Failed SHA hash ${consoleOutput}`);
-                return;
+                this._failedUpdateAttempts++;
             }
-            currentSHA = consoleOutput;
-        });
-        setUpdateTimer();
+
+            if (await checkForHash()) {
+                this.platform.shutdown(StatusFlag.ShutdownShouldRestart);
+            }
+        }, this._updatePeriod);
     }
-};
 
-exports.unload = function() {
-    if (timeout) {
-        clearTimeout(timeout);
+    async load () {
+        const branchName = (await git.getCurrentBranchName()).trim();
+
+        // Only allow auto update to be run on the master branch.
+        // By default auto update is enabled but can be turned off in the config.
+        if (branchName === 'master' && this.config.autoUpdateEnabled && (await files.fileExists(global.rootPathJoin('.git'))) === 'directory') {
+            this._updatePeriod = this.config.autoUpdatePeriod || defaultUpdatePeriod;
+            this._currentSha = await git.getSHAOfHead();
+            this._setUpdateTimer();
+        }
     }
-    shutdown = null;
-};
 
-exports.run = function (api, event) {
-    api.sendMessage($$`Updating from git`, event.thread_id);
-    git.pull(function(err) {
-        if (err) {
-            console.critical(err);
-            api.sendMessage($$`Update failed`, event.thread_id);
-        }
-        else {
-            api.sendMessage($$`Updating submodules`, event.thread_id);
-            git.submoduleUpdate(function(err) {
-                if (err) {
-                    console.critical(err);
-                    api.sendMessage($$`Update failed`, event.thread_id);
-                }
-                else {
-                    api.sendMessage($$`Updating installed NPM packages`, event.thread_id);
-                    try {
-                        npm.update();
-                        api.sendMessage($$`Update successful`, event.thread_id);
-                    }
-                    catch (e) {
-                        console.critical(e);
-                        api.sendMessage($$`Update failed`, event.thread_id);
-                    }
-                }
-            });
-        }
-    });
+    unload () {
+        this._timeout && clearTimeout(this._timeout);
+    }
 
-    return true;
-};
+    async _runCheckError (api, thread, func, stat) {
+        try {
+            api.sendMessage(stat, thread);
+            await func();
+            return true;
+        }
+        catch (e) {
+            LOG.critical(e);
+            api.sendMessage($$`Update failed`, thread);
+            return false;
+        }
+    }
+
+    async run (api, event) {
+        if (await this._runCheckError(api, event.thread_id, git.pull, $$`Updating from git`) &&
+            await this._runCheckError(api, event.thread_id, git.submoduleUpdate, $$`Updating submodules`) &&
+            await this._runCheckError(api, event.thread_id, npm.update, $$`Updating installed NPM packages`)) {
+            api.sendMessage($$`Update successful`, event.thread_id);
+        }
+        return true;
+    }
+}
+module.exports = new UpdateModule();
